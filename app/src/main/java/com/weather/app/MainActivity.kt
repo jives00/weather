@@ -1,6 +1,5 @@
 package com.weather.app
 
-import android.app.AlarmManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -30,7 +29,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        requestExactAlarmPermissionIfNeeded()
         requestBatteryOptimizationExemption()
         setContent {
             WeatherTheme {
@@ -67,14 +65,4 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun requestExactAlarmPermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
-            if (!alarmManager.canScheduleExactAlarms()) {
-                startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                    data = Uri.parse("package:$packageName")
-                })
-            }
-        }
-    }
 }

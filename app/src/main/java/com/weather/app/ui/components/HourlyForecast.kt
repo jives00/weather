@@ -13,7 +13,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.weather.app.domain.model.HourlyWeather
 import com.weather.app.domain.model.Units
@@ -71,15 +70,7 @@ private fun HourlyItem(item: HourlyWeather, units: Units, isNow: Boolean) {
             style = MaterialTheme.typography.labelLarge,
             color = OnWeatherSurface
         )
-        if (item.precipitationProbability > 0) {
-            Text(
-                text = "${item.precipitationProbability}%",
-                style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF81D4FA)
-            )
-        } else {
-            Spacer(Modifier.height(14.dp))
-        }
+        Spacer(Modifier.height(14.dp))
         Icon(
             imageVector = WeatherIcon.forCondition(item.condition),
             contentDescription = null,

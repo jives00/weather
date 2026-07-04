@@ -1,18 +1,17 @@
 package com.weather.app.ui.components
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.weather.app.domain.model.HourlyWeather
@@ -61,78 +60,98 @@ fun PrecipitationForecastCard(
         subText = "Continuing through $endStr"
     }
 
+    val maxProbability = precipHours.maxOf { it.precipitationProbability }
+    val totalAmount = precipHours.sumOf { it.precipitation }
+    val amountText = formatPrecipAmount(totalAmount, units)
+
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(WeatherCardBackground)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+            .background(WeatherCardBackground),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(headerText, style = MaterialTheme.typography.titleMedium, color = OnWeatherSurface)
-        Text(subText, style = MaterialTheme.typography.bodyMedium, color = OnWeatherSurfaceDim)
-        Spacer(Modifier.height(8.dp))
-        PrecipBarChart(hours = nextHours.take(8), precipType = precipType)
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(headerText, style = MaterialTheme.typography.titleMedium, color = OnWeatherSurface)
+            Text(subText, style = MaterialTheme.typography.bodyMedium, color = OnWeatherSurfaceDim)
+            Row(
+                modifier = Modifier.padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text("$maxProbability% chance", style = MaterialTheme.typography.bodyMedium, color = OnWeatherSurface)
+                Text("$amountText expected", style = MaterialTheme.typography.bodyMedium, color = OnWeatherSurface)
+            }
+        }
+        PrecipBarChart(hours = nextHours, precipType = precipType, units = units)
     }
 }
 
+private fun formatPrecipAmount(amount: Double, units: Units): String {
+    val decimals = if (units == Units.IMPERIAL) 2 else 1
+    return "%.${decimals}f%s".format(amount, units.precipitationUnit)
+}
+
+private fun formatHourlyAmount(amount: Double, units: Units): String {
+    val decimals = if (units == Units.IMPERIAL) 2 else 1
+    return "%.${decimals}f".format(amount)
+}
+
+private val barAreaHeight = 56.dp
+
 @Composable
-private fun PrecipBarChart(hours: List<HourlyWeather>, precipType: String) {
+private fun PrecipBarChart(hours: List<HourlyWeather>, precipType: String, units: Units) {
     val barColor = if (precipType == "Snow") Color(0xFFB0BEC5) else Color(0xFF4FC3F7)
     val maxVal = hours.maxOfOrNull { maxOf(it.precipitation, it.precipitationProbability / 100.0) }?.coerceAtLeast(0.1) ?: 1.0
 
-    Box(modifier = Modifier.fillMaxWidth().height(72.dp)) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val w = size.width
-            val h = size.height
-            val chartBottom = h * 0.75f
-            val chartHeight = chartBottom * 0.9f
-            val labelAreaW = 48f
-            val chartW = w - labelAreaW
-            val barW = chartW / hours.size
+    LazyRow(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        items(hours) { hour ->
+            val value = maxOf(hour.precipitation, hour.precipitationProbability / 100.0)
+            val normalized = (value / maxVal).toFloat().coerceIn(0f, 1f)
 
-            // Y-axis labels
-            val labels = listOf("Heavy" to 0.0f, "Mod" to 0.33f, "Light" to 0.66f)
-            labels.forEach { (label, frac) ->
-                val y = chartBottom - chartHeight * (1f - frac)
-                drawLine(Color(0x20FFFFFF), Offset(labelAreaW, y), Offset(w, y), strokeWidth = 0.5f)
-            }
-
-            // Baseline
-            drawLine(Color(0x50FFFFFF), Offset(labelAreaW, chartBottom), Offset(w, chartBottom), strokeWidth = 1f)
-
-            // Bars
-            hours.forEachIndexed { i, hour ->
-                val value = maxOf(hour.precipitation, hour.precipitationProbability / 100.0)
-                val normalized = (value / maxVal).toFloat().coerceIn(0f, 1f)
-                val barH = normalized * chartHeight
-                if (barH > 1f) {
-                    val left = labelAreaW + i * barW + barW * 0.15f
-                    val top = chartBottom - barH
-                    drawRoundRect(
-                        color = barColor.copy(alpha = 0.8f),
-                        topLeft = Offset(left, top),
-                        size = Size(barW * 0.7f, barH),
-                        cornerRadius = CornerRadius(4f)
-                    )
-                }
-            }
-        }
-        // Time labels row — drawn separately for text support
-        Row(
-            modifier = Modifier.fillMaxWidth().align(androidx.compose.ui.Alignment.BottomStart).padding(start = 48.dp),
-        ) {
-            hours.forEachIndexed { i, hour ->
-                if (i % 2 == 0) {
-                    Box(modifier = Modifier.weight(2f)) {
-                        Text(
-                            text = hourFmt.format(Instant.ofEpochSecond(hour.time)).lowercase(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = OnWeatherSurfaceDim
+            Column(
+                modifier = Modifier.width(56.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "${hour.precipitationProbability}%",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = OnWeatherSurfaceDim
+                )
+                Box(
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .height(barAreaHeight)
+                        .fillMaxWidth(0.5f),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    if (normalized > 0f) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .fillMaxHeight(normalized.coerceAtLeast(0.03f))
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(barColor.copy(alpha = 0.8f))
                         )
                     }
-                } else {
-                    Spacer(Modifier.weight(1f))
                 }
+                Text(
+                    text = formatHourlyAmount(hour.precipitation, units),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = OnWeatherSurfaceDim,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+                Text(
+                    text = hourFmt.format(Instant.ofEpochSecond(hour.time)).lowercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = OnWeatherSurfaceDim,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
             }
         }
     }
