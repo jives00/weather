@@ -33,6 +33,7 @@ sealed class UpdateState {
     data class Available(val tag: String, val apkUrl: String) : UpdateState()
     data class Downloading(val progress: Float) : UpdateState()
     data class ReadyToInstall(val uri: Uri?) : UpdateState()
+    data class Error(val message: String) : UpdateState()
     data object Dismissed : UpdateState()
 }
 
@@ -53,9 +54,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val updateState: StateFlow<UpdateState> = _updateState.asStateFlow()
 
     init {
+        checkForUpdate()
+    }
+
+    fun checkForUpdate() {
         viewModelScope.launch {
-            val info = updateRepository.checkForUpdate()
-            if (info != null) _updateState.value = UpdateState.Available(info.tag, info.apkUrl)
+            updateRepository.checkForUpdate().fold(
+                onSuccess = { info ->
+                    if (info != null) _updateState.value = UpdateState.Available(info.tag, info.apkUrl)
+                },
+                onFailure = { e -> _updateState.value = UpdateState.Error(e.message ?: "Update check failed") }
+            )
         }
     }
 
@@ -66,7 +75,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _updateState.value = when (progress) {
                     is DownloadProgress.InProgress -> UpdateState.Downloading(progress.fraction)
                     is DownloadProgress.Complete -> UpdateState.ReadyToInstall(progress.uri)
-                    is DownloadProgress.Failed -> UpdateState.Available(state.tag, state.apkUrl)
+                    is DownloadProgress.Failed -> UpdateState.Error(progress.reason)
                 }
             }
         }

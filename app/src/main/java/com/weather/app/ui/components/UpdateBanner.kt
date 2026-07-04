@@ -24,6 +24,7 @@ import com.weather.app.ui.main.UpdateState
 
 private val BannerBackground = Color(0xE6192028)
 private val AccentBlue = Color(0xFF81D4FA)
+private val ErrorRed = Color(0xFFEF9A9A)
 
 @Composable
 fun UpdateBanner(
@@ -32,9 +33,11 @@ fun UpdateBanner(
     onUpdate: () -> Unit,
     onInstall: () -> Unit,
     onDismiss: () -> Unit,
+    onRetry: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val visible = state is UpdateState.Available || state is UpdateState.Downloading || state is UpdateState.ReadyToInstall
+    val visible = state is UpdateState.Available || state is UpdateState.Downloading ||
+        state is UpdateState.ReadyToInstall || state is UpdateState.Error
 
     AnimatedVisibility(
         visible = visible,
@@ -54,6 +57,7 @@ fun UpdateBanner(
                 is UpdateState.Available -> AvailableContent(state.tag, onUpdate, onDismiss)
                 is UpdateState.Downloading -> DownloadingContent(state.progress)
                 is UpdateState.ReadyToInstall -> ReadyContent(onInstall, onDismiss)
+                is UpdateState.Error -> ErrorContent(state.message, onRetry, onDismiss)
                 else -> {}
             }
         }
@@ -104,6 +108,34 @@ private fun DownloadingContent(progress: Float) {
             color = AccentBlue,
             trackColor = Color.White.copy(alpha = 0.15f)
         )
+    }
+}
+
+@Composable
+private fun ErrorContent(message: String, onRetry: () -> Unit, onDismiss: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Update check failed",
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = message,
+                color = ErrorRed,
+                fontSize = 12.sp
+            )
+        }
+        TextButton(
+            onClick = onRetry,
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+        ) {
+            Text("Retry", color = AccentBlue, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        }
+        IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+            Icon(Icons.Filled.Close, contentDescription = "Dismiss", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
+        }
     }
 }
 

@@ -104,7 +104,8 @@ fun MainScreen(
                 context = context,
                 onUpdate = { viewModel.startUpdate(context) },
                 onInstall = { viewModel.installUpdate(context) },
-                onDismiss = { viewModel.dismissUpdate() }
+                onDismiss = { viewModel.dismissUpdate() },
+                onRetry = { viewModel.checkForUpdate() }
             )
         }
 

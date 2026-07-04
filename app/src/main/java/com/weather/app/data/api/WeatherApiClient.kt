@@ -1,5 +1,6 @@
 package com.weather.app.data.api
 
+import com.weather.app.BuildConfig
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -44,6 +45,24 @@ interface AirQualityApi {
     ): AirQualityResponse
 }
 
+interface OpenWeatherMapApi {
+    @GET("weather")
+    suspend fun getCurrentWeather(
+        @Query("lat") latitude: Double,
+        @Query("lon") longitude: Double,
+        @Query("appid") apiKey: String = BuildConfig.OWM_API_KEY,
+        @Query("units") units: String = "imperial"
+    ): OwmCurrentResponse
+
+    @GET("forecast")
+    suspend fun getForecast(
+        @Query("lat") latitude: Double,
+        @Query("lon") longitude: Double,
+        @Query("appid") apiKey: String = BuildConfig.OWM_API_KEY,
+        @Query("units") units: String = "imperial"
+    ): OwmForecastResponse
+}
+
 object WeatherApiClient {
     private val httpClient by lazy {
         OkHttpClient.Builder()
@@ -67,5 +86,14 @@ object WeatherApiClient {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(AirQualityApi::class.java)
+    }
+
+    val openWeatherMapApi: OpenWeatherMapApi by lazy {
+        Retrofit.Builder()
+            .baseUrl("https://api.openweathermap.org/data/2.5/")
+            .client(httpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(OpenWeatherMapApi::class.java)
     }
 }

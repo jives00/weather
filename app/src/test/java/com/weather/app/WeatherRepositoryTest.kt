@@ -6,6 +6,7 @@ import com.weather.app.data.api.AirQualityResponse
 import com.weather.app.data.api.CurrentData
 import com.weather.app.data.api.DailyData
 import com.weather.app.data.api.HourlyData
+import com.weather.app.data.api.OpenWeatherMapApi
 import com.weather.app.data.api.WeatherApi
 import com.weather.app.data.api.WeatherApiResponse
 import com.weather.app.data.repository.WeatherRepository
@@ -22,6 +23,7 @@ import org.junit.Test
 class WeatherRepositoryTest {
     private lateinit var weatherApi: WeatherApi
     private lateinit var airQualityApi: AirQualityApi
+    private lateinit var openWeatherMapApi: OpenWeatherMapApi
     private lateinit var repository: WeatherRepository
 
     private val testLocation = WeatherLocation(
@@ -32,7 +34,8 @@ class WeatherRepositoryTest {
     fun setup() {
         weatherApi = mockk()
         airQualityApi = mockk()
-        repository = WeatherRepository(weatherApi, airQualityApi)
+        openWeatherMapApi = mockk()
+        repository = WeatherRepository(weatherApi, airQualityApi, openWeatherMapApi)
     }
 
     @Test
@@ -53,13 +56,31 @@ class WeatherRepositoryTest {
     }
 
     @Test
-    fun `getForecast returns failure when api throws`() = runTest {
+    fun `getForecast returns failure when both primary and fallback apis throw`() = runTest {
         coEvery {
             weatherApi.getForecast(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         } throws RuntimeException("Network error")
+        coEvery { airQualityApi.getAirQuality(any(), any(), any()) } throws RuntimeException("AQI unavailable")
+        coEvery { openWeatherMapApi.getCurrentWeather(any(), any(), any(), any()) } throws RuntimeException("OWM down too")
 
         val result = repository.getForecast(testLocation, Units.IMPERIAL)
         assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `getForecast falls back to OpenWeatherMap when primary api throws`() = runTest {
+        coEvery {
+            weatherApi.getForecast(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+        } throws RuntimeException("Network error")
+        coEvery { airQualityApi.getAirQuality(any(), any(), any()) } returns AirQualityResponse(AirQualityCurrentData(42))
+        coEvery { openWeatherMapApi.getCurrentWeather(any(), any(), any(), any()) } returns fakeOwmCurrentResponse()
+        coEvery { openWeatherMapApi.getForecast(any(), any(), any(), any()) } returns fakeOwmForecastResponse()
+
+        val result = repository.getForecast(testLocation, Units.IMPERIAL)
+        assertTrue(result.isSuccess)
+        val forecast = result.getOrThrow()
+        assertEquals(72.0, forecast.current.temperature, 0.01)
+        assertEquals(42, forecast.aqi)
     }
 
     @Test
@@ -119,5 +140,28 @@ class WeatherRepositoryTest {
             windSpeedMax = listOf(15.0, 12.0),
             uvIndexMax = listOf(3.0, 4.0)
         )
+    )
+
+    private fun fakeOwmCurrentResponse() = com.weather.app.data.api.OwmCurrentResponse(
+        dt = 1704110400,
+        main = com.weather.app.data.api.OwmMain(temp = 72.0, feelsLike = 70.0, humidity = 55, pressure = 1013.0),
+        weather = listOf(com.weather.app.data.api.OwmWeatherDescriptor(id = 800, main = "Clear", description = "clear sky", icon = "01d")),
+        wind = com.weather.app.data.api.OwmWind(speed = 10.0, deg = 180),
+        visibility = 10000.0,
+        sys = com.weather.app.data.api.OwmSys(sunrise = 1704106800, sunset = 1704142800)
+    )
+
+    private fun fakeOwmForecastResponse() = com.weather.app.data.api.OwmForecastResponse(
+        list = listOf(
+            com.weather.app.data.api.OwmForecastEntry(
+                dt = 1704110400,
+                main = com.weather.app.data.api.OwmMain(temp = 72.0, feelsLike = 70.0, humidity = 55, pressure = 1013.0),
+                weather = listOf(com.weather.app.data.api.OwmWeatherDescriptor(id = 800, main = "Clear", description = "clear sky", icon = "01d")),
+                wind = com.weather.app.data.api.OwmWind(speed = 10.0, deg = 180),
+                visibility = 10000.0,
+                pop = 0.1
+            )
+        ),
+        city = com.weather.app.data.api.OwmCity(timezone = -21600, sunrise = 1704106800, sunset = 1704142800)
     )
 }

@@ -13,6 +13,13 @@ if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
 }
 
+// Load local.properties for the OpenWeatherMap fallback API key
+val localPropertiesFile = rootProject.file("local.properties")
+val localProperties = Properties()
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.inputStream().use { localProperties.load(it) }
+}
+
 android {
     namespace = "com.weather.app"
     compileSdk = 35
@@ -21,10 +28,15 @@ android {
         applicationId = "com.weather.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
-        versionName = "2.0"
+        versionCode = 12
+        versionName = "2.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
+        buildConfigField(
+            "String",
+            "OWM_API_KEY",
+            "\"${localProperties.getProperty("OWM_API_KEY", "")}\""
+        )
     }
 
     applicationVariants.all {

@@ -33,6 +33,21 @@ enum class WeatherCondition {
             else -> UNKNOWN
         }
 
+        fun fromOwmCode(code: Int, isDay: Boolean): WeatherCondition = when (code) {
+            in 200..232 -> THUNDERSTORM
+            in 300..321 -> DRIZZLE
+            511 -> FREEZING_RAIN
+            in 500..504 -> RAIN
+            in 520..531 -> RAIN_SHOWERS
+            in 611..613 -> FREEZING_RAIN
+            in 600..622 -> SNOW
+            701, 711, 721, 731, 741, 751, 761, 762, 771, 781 -> FOG
+            800 -> if (isDay) CLEAR_DAY else CLEAR_NIGHT
+            801, 802 -> if (isDay) PARTLY_CLOUDY_DAY else PARTLY_CLOUDY_NIGHT
+            803, 804 -> OVERCAST
+            else -> UNKNOWN
+        }
+
         fun descriptionFromWmoCode(code: Int): String = when (code) {
             0 -> "Clear sky"
             1 -> "Mainly clear"
