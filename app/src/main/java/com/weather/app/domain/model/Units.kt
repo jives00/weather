@@ -13,4 +13,9 @@ enum class Units(val label: String) {
     val apiTemperatureUnit: String get() = if (this == IMPERIAL) "fahrenheit" else "celsius"
     val apiWindSpeedUnit: String get() = if (this == IMPERIAL) "mph" else "kmh"
     val apiPrecipitationUnit: String get() = if (this == IMPERIAL) "inch" else "mm"
+
+    // Forecast values arrive already converted to the user's display unit, but precipitation
+    // thresholds in the UI are written in mm (where the magnitudes are legible). Convert the
+    // threshold rather than the value so those call sites keep reading in a single unit.
+    fun fromMm(mm: Double): Double = if (this == IMPERIAL) mm / 25.4 else mm
 }

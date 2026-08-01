@@ -139,7 +139,7 @@ private fun WeatherPage(forecast: WeatherForecast, hourOfDay: Int) {
     )
     val hasPrecipForecast = remember(forecast) {
         forecast.hourly.filter { it.time >= nowEpoch }.take(12)
-            .any { it.precipitation > 0.05 || it.precipitationProbability > 25 }
+            .any { it.precipitation > forecast.units.fromMm(0.05) || it.precipitationProbability > 25 }
     }
 
     LazyColumn(

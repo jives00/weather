@@ -36,14 +36,14 @@ fun PrecipitationForecastCard(
     val nowEpoch = System.currentTimeMillis() / 1000
     val nextHours = remember(hourly) { hourly.filter { it.time >= nowEpoch }.take(12) }
 
-    val precipHours = nextHours.filter { it.precipitation > 0.05 || it.precipitationProbability > 25 }
+    val precipHours = nextHours.filter { it.precipitation > units.fromMm(0.05) || it.precipitationProbability > 25 }
     if (precipHours.isEmpty()) return
 
     val isSnow = precipHours.first().condition in listOf(WeatherCondition.SNOW, WeatherCondition.SNOW_SHOWERS)
     val precipType = if (isSnow) "Snow" else "Rain"
 
     val currentlyPrecip = nextHours.firstOrNull()
-        ?.let { it.precipitation > 0.1 || it.precipitationProbability > 50 } == true
+        ?.let { it.precipitation > units.fromMm(0.1) || it.precipitationProbability > 50 } == true
 
     val headerText: String
     val subText: String
@@ -93,9 +93,17 @@ private fun formatPrecipAmount(amount: Double, units: Units): String {
     return "%.${decimals}f%s".format(amount, units.precipitationUnit)
 }
 
+// Hourly rates are often too light to survive rounding — 0.004in of drizzle would read as
+// "0.00" while it's visibly raining. Anything that rounds to zero but isn't zero shows as
+// "<0.01" (or "<0.1" in mm) so a light hour stays distinguishable from a dry one.
 private fun formatHourlyAmount(amount: Double, units: Units): String {
     val decimals = if (units == Units.IMPERIAL) 2 else 1
-    return "%.${decimals}f".format(amount)
+    val smallest = if (units == Units.IMPERIAL) 0.01 else 0.1
+    return when {
+        amount <= 0.0 -> "%.${decimals}f".format(0.0)
+        amount < smallest / 2 -> "<%.${decimals}f".format(smallest)
+        else -> "%.${decimals}f".format(amount)
+    }
 }
 
 private val barAreaHeight = 56.dp
@@ -103,7 +111,11 @@ private val barAreaHeight = 56.dp
 @Composable
 private fun PrecipBarChart(hours: List<HourlyWeather>, precipType: String, units: Units) {
     val barColor = if (precipType == "Snow") Color(0xFFB0BEC5) else Color(0xFF4FC3F7)
-    val maxVal = hours.maxOfOrNull { maxOf(it.precipitation, it.precipitationProbability / 100.0) }?.coerceAtLeast(0.1) ?: 1.0
+    // Bars are amount only; probability is already the label above each column. Scaling is
+    // relative to the tallest hour on screen, floored at a light-rain rate so a window of
+    // nothing but drizzle doesn't render at full height and read as a downpour.
+    val lightRate = units.fromMm(0.5)
+    val maxVal = hours.maxOfOrNull { it.precipitation }?.coerceAtLeast(lightRate) ?: lightRate
 
     LazyRow(
         modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
@@ -111,8 +123,7 @@ private fun PrecipBarChart(hours: List<HourlyWeather>, precipType: String, units
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         items(hours) { hour ->
-            val value = maxOf(hour.precipitation, hour.precipitationProbability / 100.0)
-            val normalized = (value / maxVal).toFloat().coerceIn(0f, 1f)
+            val normalized = (hour.precipitation / maxVal).toFloat().coerceIn(0f, 1f)
 
             Column(
                 modifier = Modifier.width(56.dp),
