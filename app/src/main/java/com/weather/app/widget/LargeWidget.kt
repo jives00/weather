@@ -50,9 +50,10 @@ class LargeWeatherWidget : GlanceAppWidget() {
                         Spacer(GlanceModifier.height(4.dp))
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = WeatherDrawableMap.emojiFor(data.condition),
-                                style = TextStyle(fontSize = 48.sp)
+                            Image(
+                                provider = ImageProvider(WeatherDrawableMap.drawableFor(data.condition)),
+                                contentDescription = data.conditionDescription,
+                                modifier = GlanceModifier.size(52.dp)
                             )
                             Spacer(GlanceModifier.width(8.dp))
                             Text(

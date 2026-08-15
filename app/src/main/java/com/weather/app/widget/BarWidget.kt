@@ -39,10 +39,10 @@ class BarWeatherWidget : GlanceAppWidget() {
                     Text("—", style = TextStyle(color = ColorProvider(Color.White), fontSize = 14.sp))
                 } else {
                     // Left: weather emoji icon
-                    Text(
-                        text = WeatherDrawableMap.emojiFor(data.condition),
-                        style = TextStyle(fontSize = 26.sp),
-                        modifier = GlanceModifier.width(36.dp)
+                    Image(
+                        provider = ImageProvider(WeatherDrawableMap.drawableFor(data.condition)),
+                        contentDescription = data.conditionDescription,
+                        modifier = GlanceModifier.size(30.dp)
                     )
 
                     Spacer(GlanceModifier.width(8.dp))

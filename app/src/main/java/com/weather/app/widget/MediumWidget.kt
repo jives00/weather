@@ -55,9 +55,10 @@ class MediumWeatherWidget : GlanceAppWidget() {
                                 )
                             }
                             Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    text = WeatherDrawableMap.emojiFor(data.condition),
-                                    style = TextStyle(fontSize = 24.sp)
+                                Image(
+                                    provider = ImageProvider(WeatherDrawableMap.drawableFor(data.condition)),
+                                    contentDescription = data.conditionDescription,
+                                    modifier = GlanceModifier.size(26.dp)
                                 )
                                 Text(
                                     text = "${data.temperature}${data.temperatureSymbol}",
