@@ -223,6 +223,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun jumpToPage(locationId: String) { _pendingPageLocationId.value = locationId }
 
+    /** Back to page 1 — the GPS city when available. */
+    fun jumpToFirstPage() { _pendingPageLocationId.value = locations.value.firstOrNull()?.id }
+
     fun onPageJumpHandled() { _pendingPageLocationId.value = null }
 
     /** Loads a city's forecast without saving it — no widget data, no background refresh. */
@@ -257,7 +260,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             locationDataStore.removeRecentSearch(preview.location)
             addLocation(preview.location)
         }
-        _pendingPageLocationId.value = preview.location.id
     }
 
     /** Undo [savePreview] — the city goes back to being a recent search. */
@@ -265,7 +267,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val preview = _preview.value ?: return
         if (!preview.isSaved) return
         _preview.value = preview.copy(isSaved = false)
-        _pendingPageLocationId.update { if (it == preview.location.id) null else it }
         viewModelScope.launch {
             locationDataStore.addRecentSearch(preview.location)
             removeLocation(preview.location.id)

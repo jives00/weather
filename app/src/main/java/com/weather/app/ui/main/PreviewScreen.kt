@@ -22,8 +22,7 @@ import java.util.Calendar
 @Composable
 fun PreviewScreen(
     viewModel: MainViewModel,
-    /** [saved] — the city was added, so back should skip search and land on the pager. */
-    onBack: (saved: Boolean) -> Unit
+    onBack: () -> Unit
 ) {
     val preview by viewModel.preview.collectAsStateWithLifecycle()
     val current = preview ?: return
@@ -33,7 +32,7 @@ fun PreviewScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    BackHandler { onBack(current.isSaved) }
+    BackHandler(onBack = onBack)
 
     Box(Modifier.fillMaxSize()) {
         AnimatedBackgroundWithSize(
@@ -58,7 +57,7 @@ fun PreviewScreen(
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = { onBack(current.isSaved) }) {
+            IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = OnWeatherSurface)
             }
             Text(

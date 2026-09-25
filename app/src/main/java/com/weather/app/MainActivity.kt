@@ -64,10 +64,10 @@ class MainActivity : ComponentActivity() {
                     composable("preview") {
                         PreviewScreen(
                             viewModel = mainViewModel,
-                            onBack = { saved ->
-                                // Once added, the city lives in the pager — skip back past search
-                                if (saved) navController.popBackStack("weather", inclusive = false)
-                                else navController.popBackStack()
+                            onBack = {
+                                // Preview always exits to page 1, skipping search
+                                mainViewModel.jumpToFirstPage()
+                                navController.popBackStack("weather", inclusive = false)
                             }
                         )
                     }
