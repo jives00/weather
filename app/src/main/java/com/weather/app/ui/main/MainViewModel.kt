@@ -23,8 +23,12 @@ import com.weather.app.widget.BarWeatherWidget
 import com.weather.app.widget.LargeWeatherWidget
 import com.weather.app.widget.MediumWeatherWidget
 import com.weather.app.widget.SmallWeatherWidget
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.tasks.await
 import java.util.Locale
 
@@ -37,12 +41,22 @@ sealed class UpdateState {
     data object Dismissed : UpdateState()
 }
 
+/** [query] is the (trimmed) text these results answer — lags the field while a search is in flight. */
+data class SearchResults(val query: String, val locations: List<WeatherLocation>)
+
+data class PreviewState(
+    val location: WeatherLocation,
+    val forecast: WeatherUiState,
+    val isSaved: Boolean = false
+)
+
 sealed class WeatherUiState {
     data object Loading : WeatherUiState()
     data class Success(val forecast: WeatherForecast) : WeatherUiState()
     data class Error(val message: String) : WeatherUiState()
 }
 
+@OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val locationDataStore = LocationDataStore(application)
     private val settingsDataStore = SettingsDataStore(application)
@@ -181,20 +195,100 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun searchLocations(query: String): List<WeatherLocation> {
-        return try {
+    // ── Search & preview ─────────────────────────────────────────────────────
+
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    val searchResults: StateFlow<SearchResults> = _searchQuery
+        .map { it.trim() }
+        .distinctUntilChanged()
+        .debounce(300)
+        .mapLatest { query -> SearchResults(query, if (query.length < 2) emptyList() else geocode(query)) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SearchResults("", emptyList()))
+
+    val recentSearches: StateFlow<List<WeatherLocation>> = locationDataStore.recentSearches
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _preview = MutableStateFlow<PreviewState?>(null)
+    val preview: StateFlow<PreviewState?> = _preview.asStateFlow()
+
+    /** Location the main pager should scroll to next time it's shown. */
+    private val _pendingPageLocationId = MutableStateFlow<String?>(null)
+    val pendingPageLocationId: StateFlow<String?> = _pendingPageLocationId.asStateFlow()
+
+    fun onSearchQueryChange(query: String) { _searchQuery.value = query }
+
+    fun clearSearch() { _searchQuery.value = "" }
+
+    fun jumpToPage(locationId: String) { _pendingPageLocationId.value = locationId }
+
+    fun onPageJumpHandled() { _pendingPageLocationId.value = null }
+
+    /** Loads a city's forecast without saving it — no widget data, no background refresh. */
+    fun startPreview(location: WeatherLocation) {
+        _preview.value = PreviewState(location, WeatherUiState.Loading)
+        viewModelScope.launch {
+            locationDataStore.addRecentSearch(location)
+            loadPreviewForecast(location)
+        }
+    }
+
+    fun retryPreview() {
+        val location = _preview.value?.location ?: return
+        _preview.update { it?.copy(forecast = WeatherUiState.Loading) }
+        viewModelScope.launch { loadPreviewForecast(location) }
+    }
+
+    private suspend fun loadPreviewForecast(location: WeatherLocation) {
+        val state = repository.getForecast(location, units.value).fold(
+            onSuccess = { WeatherUiState.Success(it) },
+            onFailure = { WeatherUiState.Error(it.message ?: "Failed to load weather") }
+        )
+        // Ignore a late response if the user already moved on to another city
+        _preview.update { if (it?.location?.id == location.id) it.copy(forecast = state) else it }
+    }
+
+    fun savePreview() {
+        val preview = _preview.value ?: return
+        if (preview.isSaved) return
+        _preview.value = preview.copy(isSaved = true)
+        viewModelScope.launch {
+            locationDataStore.removeRecentSearch(preview.location)
+            addLocation(preview.location)
+        }
+        _pendingPageLocationId.value = preview.location.id
+    }
+
+    /** Undo [savePreview] — the city goes back to being a recent search. */
+    fun unsavePreview() {
+        val preview = _preview.value ?: return
+        if (!preview.isSaved) return
+        _preview.value = preview.copy(isSaved = false)
+        _pendingPageLocationId.update { if (it == preview.location.id) null else it }
+        viewModelScope.launch {
+            locationDataStore.addRecentSearch(preview.location)
+            removeLocation(preview.location.id)
+        }
+    }
+
+    private suspend fun geocode(query: String): List<WeatherLocation> = withContext(Dispatchers.IO) {
+        try {
             @Suppress("DEPRECATION")
             val addresses = Geocoder(getApplication(), Locale.getDefault())
-                .getFromLocationName(query, 5) ?: emptyList()
+                .getFromLocationName(query, 8) ?: emptyList()
             addresses.mapNotNull { addr ->
                 val name = addr.locality ?: addr.subAdminArea ?: addr.adminArea ?: return@mapNotNull null
                 val country = if (addr.countryCode != "US") ", ${addr.countryCode}" else ""
+                val region = listOfNotNull(addr.adminArea?.takeIf { it != name }, addr.countryName)
+                    .joinToString(", ").ifEmpty { null }
                 WeatherLocation(
                     name = "$name$country",
                     latitude = addr.latitude,
-                    longitude = addr.longitude
+                    longitude = addr.longitude,
+                    region = region
                 )
-            }
+            }.distinctBy { it.name to it.region }
         } catch (_: Exception) { emptyList() }
     }
 

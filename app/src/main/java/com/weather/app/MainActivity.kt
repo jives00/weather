@@ -17,6 +17,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.weather.app.ui.main.MainScreen
 import com.weather.app.ui.main.MainViewModel
+import com.weather.app.ui.main.PreviewScreen
+import com.weather.app.ui.main.SearchScreen
 import com.weather.app.ui.settings.SettingsScreen
 import com.weather.app.ui.settings.SettingsViewModel
 import com.weather.app.ui.theme.WeatherTheme
@@ -37,7 +39,36 @@ class MainActivity : ComponentActivity() {
                     composable("weather") {
                         MainScreen(
                             viewModel = mainViewModel,
-                            onNavigateToSettings = { navController.navigate("settings") }
+                            onNavigateToSettings = { navController.navigate("settings") },
+                            onNavigateToSearch = {
+                                mainViewModel.clearSearch()
+                                navController.navigate("search")
+                            }
+                        )
+                    }
+                    composable("search") {
+                        SearchScreen(
+                            viewModel = mainViewModel,
+                            onBack = { navController.popBackStack() },
+                            onSelect = { location, inPager ->
+                                if (inPager != null) {
+                                    mainViewModel.jumpToPage(inPager.id)
+                                    navController.popBackStack("weather", inclusive = false)
+                                } else {
+                                    mainViewModel.startPreview(location)
+                                    navController.navigate("preview")
+                                }
+                            }
+                        )
+                    }
+                    composable("preview") {
+                        PreviewScreen(
+                            viewModel = mainViewModel,
+                            onBack = { saved ->
+                                // Once added, the city lives in the pager — skip back past search
+                                if (saved) navController.popBackStack("weather", inclusive = false)
+                                else navController.popBackStack()
+                            }
                         )
                     }
                     composable("settings") {

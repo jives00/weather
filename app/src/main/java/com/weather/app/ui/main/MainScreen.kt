@@ -8,8 +8,8 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -26,7 +26,6 @@ import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.weather.app.domain.model.WeatherCondition
 import com.weather.app.domain.model.WeatherForecast
-import com.weather.app.domain.model.WeatherLocation
 import com.weather.app.ui.components.*
 import com.weather.app.ui.theme.OnWeatherSurface
 import com.weather.app.ui.theme.OnWeatherSurfaceDim
@@ -36,7 +35,8 @@ import java.util.Calendar
 @Composable
 fun MainScreen(
     viewModel: MainViewModel,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onNavigateToSearch: () -> Unit
 ) {
     val context = LocalContext.current
     val locations by viewModel.locations.collectAsStateWithLifecycle()
@@ -51,13 +51,22 @@ fun MainScreen(
         else locationPermission.launchPermissionRequest()
     }
 
-    var showAddDialog by remember { mutableStateOf(false) }
     val pageCount = if (locations.isEmpty()) 1 else locations.size
     val pagerState = rememberPagerState(pageCount = { pageCount })
 
     val currentLocation = locations.getOrNull(pagerState.currentPage)
     val currentForecast = (currentLocation?.let { forecasts[it.id] } as? WeatherUiState.Success)?.forecast
     val hourOfDay = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
+
+    // Search asks for a specific city (already saved, or just added) — scroll to it once it's in the list
+    val pendingPageLocationId by viewModel.pendingPageLocationId.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingPageLocationId, locations) {
+        val index = locations.indexOfFirst { it.id == pendingPageLocationId }
+        if (index >= 0) {
+            pagerState.scrollToPage(index)
+            viewModel.onPageJumpHandled()
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Animated gradient background
@@ -71,25 +80,14 @@ fun MainScreen(
             val location = locations.getOrNull(page)
             val state = location?.let { forecasts[it.id] }
             when {
-                location == null -> EmptyState(onAddLocation = { showAddDialog = true })
+                location == null -> EmptyState(onAddLocation = onNavigateToSearch)
                 state == null || state is WeatherUiState.Loading -> LoadingPage()
                 state is WeatherUiState.Error -> ErrorPage(state.message) { viewModel.fetchForecast(location) }
                 state is WeatherUiState.Success -> WeatherPage(forecast = state.forecast, hourOfDay = hourOfDay)
             }
         }
 
-        // Status bar scrim — prevents scrolled content from showing through the notification bar
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .windowInsetsTopHeight(androidx.compose.foundation.layout.WindowInsets.statusBars)
-                .background(
-                    androidx.compose.ui.graphics.Brush.verticalGradient(
-                        colors = listOf(Color.Black.copy(alpha = 0.88f), Color.Transparent)
-                    )
-                )
-                .align(Alignment.TopCenter)
-        )
+        StatusBarScrim(Modifier.align(Alignment.TopCenter))
 
         // Top bar + update banner stacked
         Column(modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding()) {
@@ -97,7 +95,7 @@ fun MainScreen(
                 locationName = currentLocation?.name ?: "",
                 isGps = currentLocation?.isCurrentLocation == true,
                 onSettings = onNavigateToSettings,
-                onAdd = { showAddDialog = true }
+                onSearch = onNavigateToSearch
             )
             UpdateBanner(
                 state = updateState,
@@ -118,18 +116,10 @@ fun MainScreen(
             )
         }
     }
-
-    if (showAddDialog) {
-        AddLocationDialog(
-            onDismiss = { showAddDialog = false },
-            onSearch = { viewModel.searchLocations(it) },
-            onSelect = { viewModel.addLocation(it); showAddDialog = false }
-        )
-    }
 }
 
 @Composable
-private fun WeatherPage(forecast: WeatherForecast, hourOfDay: Int) {
+internal fun WeatherPage(forecast: WeatherForecast, hourOfDay: Int) {
     val nowEpoch = remember { System.currentTimeMillis() / 1000 }
     val upcomingHourly = remember(forecast) { forecast.hourly.filter { it.time >= nowEpoch - 1800 }.take(24) }
     val isPrecipCondition = forecast.current.condition in listOf(
@@ -264,13 +254,13 @@ private fun HeroContent(forecast: WeatherForecast, modifier: Modifier = Modifier
 }
 
 @Composable
-private fun TopBar(locationName: String, isGps: Boolean, onSettings: () -> Unit, onAdd: () -> Unit) {
+private fun TopBar(locationName: String, isGps: Boolean, onSettings: () -> Unit, onSearch: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = onAdd) {
-            Icon(Icons.Filled.Add, contentDescription = "Add location", tint = OnWeatherSurface)
+        IconButton(onClick = onSearch) {
+            Icon(Icons.Filled.Search, contentDescription = "Search locations", tint = OnWeatherSurface)
         }
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             if (isGps) {
@@ -283,6 +273,21 @@ private fun TopBar(locationName: String, isGps: Boolean, onSettings: () -> Unit,
             Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = OnWeatherSurface)
         }
     }
+}
+
+/** Prevents scrolled content from showing through the notification bar. */
+@Composable
+internal fun StatusBarScrim(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .windowInsetsTopHeight(androidx.compose.foundation.layout.WindowInsets.statusBars)
+            .background(
+                androidx.compose.ui.graphics.Brush.verticalGradient(
+                    colors = listOf(Color.Black.copy(alpha = 0.88f), Color.Transparent)
+                )
+            )
+    )
 }
 
 @Composable
@@ -298,14 +303,14 @@ private fun PageIndicator(pageCount: Int, currentPage: Int, modifier: Modifier =
 }
 
 @Composable
-private fun LoadingPage() {
+internal fun LoadingPage() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator(color = OnWeatherSurface)
     }
 }
 
 @Composable
-private fun ErrorPage(message: String, onRetry: () -> Unit) {
+internal fun ErrorPage(message: String, onRetry: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(top = 120.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Text(message, color = OnWeatherSurface, textAlign = TextAlign.Center, modifier = Modifier.padding(16.dp))
         Button(onClick = onRetry) { Text("Retry") }
@@ -319,25 +324,4 @@ private fun EmptyState(onAddLocation: () -> Unit) {
         Spacer(Modifier.height(16.dp))
         Button(onClick = onAddLocation) { Text("Add Location") }
     }
-}
-
-@Composable
-private fun AddLocationDialog(onDismiss: () -> Unit, onSearch: (String) -> List<WeatherLocation>, onSelect: (WeatherLocation) -> Unit) {
-    var query by remember { mutableStateOf("") }
-    var results by remember { mutableStateOf(emptyList<WeatherLocation>()) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add Location") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("City name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Button(onClick = { results = onSearch(query) }, modifier = Modifier.fillMaxWidth()) { Text("Search") }
-                results.forEach { loc ->
-                    TextButton(onClick = { onSelect(loc) }, modifier = Modifier.fillMaxWidth()) { Text(loc.name) }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
 }
